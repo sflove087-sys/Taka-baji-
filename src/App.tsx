@@ -367,11 +367,11 @@ export default function App() {
     nagadLogo: 'https://raw.githubusercontent.com/sflove087/assets/main/nagad_logo.png',
     rocketLogo: 'https://raw.githubusercontent.com/sflove087/assets/main/rocket_logo.png',
     walletIllustration: 'https://raw.githubusercontent.com/sflove087/assets/main/wallet_illustration.png',
-    bkashAgentNumber: '01602872965',
+    bkashAgentNumber: '01748231914,01764810008,01723993331',
     bkashAgentName: 'bKash Agent',
-    nagadAgentNumber: '01602872965',
+    nagadAgentNumber: '01748231914,01764810008,01723993331',
     nagadAgentName: 'Nagad Agent',
-    rocketAgentNumber: '01602872965',
+    rocketAgentNumber: '01748231914,01764810008,01723993331',
     rocketAgentName: 'Rocket Agent'
   });
 
@@ -421,6 +421,18 @@ export default function App() {
     }
   };
   const [modalMessage, setModalMessage] = useState('');
+
+  const [activeAgentNumber, setActiveAgentNumber] = useState('');
+
+  useEffect(() => {
+    if (view === 'payment') {
+      const numbersStr = selectedMethod === 'bkash' ? appSettings.bkashAgentNumber : selectedMethod === 'nagad' ? appSettings.nagadAgentNumber : appSettings.rocketAgentNumber;
+      const numbers = numbersStr.split(',').map(n => n.trim()).filter(n => n);
+      if (numbers.length > 0) {
+        setActiveAgentNumber(numbers[Math.floor(Math.random() * numbers.length)]);
+      }
+    }
+  }, [view, selectedMethod, appSettings]);
 
   useEffect(() => {
     if (view === 'activation' && currentUserData?.isActivated) {
@@ -527,10 +539,15 @@ export default function App() {
     return () => clearInterval(timer);
   }, [view]);
 
+  const toBanglaDigits = (num: number | string) => {
+    const banglaDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    return num.toString().split('').map(digit => banglaDigits[parseInt(digit)] || digit).join('');
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '০')}:${secs.toString().padStart(2, '০')}`;
+    return `${toBanglaDigits(mins.toString().padStart(2, '0'))} : ${toBanglaDigits(secs.toString().padStart(2, '0'))}`;
   };
 
   const formatTimeEn = (seconds: number) => {
@@ -887,7 +904,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (view === 'bank' && currentUserData) {
+    if ((view === 'bank' || view === 'withdraw') && currentUserData) {
       const q = query(
         collection(db, 'bank_details'),
         where('username', '==', currentUserData.username),
@@ -1870,14 +1887,33 @@ export default function App() {
                       )}
 
                       <div className="space-y-1">
-                        <label className="block text-sm font-bold text-gray-700">{withdrawData.method === 'bank' ? t.accountNumber : t.accountNumber}</label>
-                        <input
-                          type="text"
+                        <label className="block text-sm font-bold text-gray-700">{t.accountNumber}</label>
+                        <select
                           value={withdrawData.accountNumber}
-                          onChange={(e) => setWithdrawData(prev => ({ ...prev, accountNumber: e.target.value }))}
+                          onChange={(e) => {
+                            const selected = bankHistory.find(b => b.accountNumber === e.target.value);
+                            if (selected) {
+                              setWithdrawData(prev => ({
+                                ...prev,
+                                accountNumber: selected.accountNumber,
+                                method: selected.provider,
+                                bankName: selected.bankName || '',
+                                branchName: selected.branchName || '',
+                                accountHolderName: selected.accountName || ''
+                              }));
+                            } else {
+                              setWithdrawData(prev => ({ ...prev, accountNumber: e.target.value }));
+                            }
+                          }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-sm outline-none focus:border-[#4a8a8a] text-sm"
-                          placeholder="01XXXXXXXXX"
-                        />
+                        >
+                          <option value="">{lang === 'bn' ? 'অ্যাকাউন্ট নির্বাচন করুন' : 'Select Account'}</option>
+                          {bankHistory.map(bank => (
+                            <option key={bank.id} value={bank.accountNumber}>
+                              {bank.provider.toUpperCase()} - {bank.accountNumber} ({bank.accountName})
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       <div className="space-y-1">
@@ -2807,6 +2843,9 @@ export default function App() {
                                   onChange={(e) => setAppSettings({...appSettings, [item.key]: e.target.value})}
                                   className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-50 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition-all font-bold text-gray-700 text-xs"
                                 />
+                                {item.key.toLowerCase().includes('number') && (
+                                  <p className="text-[9px] text-gray-400 italic">Use commas for multiple numbers (e.g. 017..., 018...)</p>
+                                )}
                                 {item.key.toLowerCase().includes('logo') || item.key.toLowerCase().includes('illustration') ? (
                                   <div className="h-16 bg-gray-50 rounded-lg border border-dashed border-gray-200 flex items-center justify-center overflow-hidden">
                                     {(appSettings as any)[item.key] ? (
@@ -2904,7 +2943,7 @@ export default function App() {
             {/* Instructions */}
             <div className="p-6 space-y-6">
               <p className="text-sm text-gray-600 text-center leading-relaxed">
-                {t.paymentInstructions.split('০৯ : ০৯').map((part, i, arr) => (
+                {t.paymentInstructions.split(lang === 'bn' ? '০৯ : ০৯' : '09:09').map((part, i, arr) => (
                   <React.Fragment key={i}>
                     {part}
                     {i < arr.length - 1 && <span className={`font-bold ${selectedMethod === 'bkash' ? 'text-[#e2136e]' : selectedMethod === 'nagad' ? 'text-[#f7941d]' : 'text-[#8c3494]'}`}>{lang === 'bn' ? formatTime(timeLeft) : formatTimeEn(timeLeft)}</span>}
@@ -2933,11 +2972,11 @@ export default function App() {
                       {selectedMethod === 'bkash' ? appSettings.bkashAgentName : selectedMethod === 'nagad' ? appSettings.nagadAgentName : appSettings.rocketAgentName}
                     </span>
                     <h2 className={`text-3xl font-bold tracking-wider ${selectedMethod === 'bkash' ? 'text-[#e2136e]' : selectedMethod === 'nagad' ? 'text-[#f7941d]' : 'text-[#8c3494]'}`}>
-                      {selectedMethod === 'bkash' ? appSettings.bkashAgentNumber : selectedMethod === 'nagad' ? appSettings.nagadAgentNumber : appSettings.rocketAgentNumber}
+                      {activeAgentNumber || (selectedMethod === 'bkash' ? appSettings.bkashAgentNumber.split(',')[0] : selectedMethod === 'nagad' ? appSettings.nagadAgentNumber.split(',')[0] : appSettings.rocketAgentNumber.split(',')[0])}
                     </h2>
                   </div>
                   <button 
-                    onClick={() => handleCopy(selectedMethod === 'bkash' ? appSettings.bkashAgentNumber : selectedMethod === 'nagad' ? appSettings.nagadAgentNumber : appSettings.rocketAgentNumber)}
+                    onClick={() => handleCopy(activeAgentNumber || (selectedMethod === 'bkash' ? appSettings.bkashAgentNumber.split(',')[0] : selectedMethod === 'nagad' ? appSettings.nagadAgentNumber.split(',')[0] : appSettings.rocketAgentNumber.split(',')[0]))}
                     className="px-4 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded-full border border-gray-200 hover:bg-gray-200 transition-colors"
                   >
                     {t.copy}
