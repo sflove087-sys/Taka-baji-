@@ -1,0 +1,120 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and registration data",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "currency": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "dob": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "others": { "type": "string" },
+        "referralCode": { "type": "string" },
+        "isActivated": { "type": "boolean" },
+        "activationStatus": { "type": "string", "enum": ["none", "pending", "completed"] },
+        "balance": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "password", "email"]
+    },
+    "Deposit": {
+      "title": "Deposit",
+      "description": "User activation deposit record",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "amount": { "type": "number" },
+        "transactionId": { "type": "string" },
+        "senderNumber": { "type": "string" },
+        "receiptUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "amount", "transactionId", "senderNumber", "status"]
+    },
+    "LoginLog": {
+      "title": "Login Log",
+      "description": "Record of user login attempts",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string" }
+      },
+      "required": ["username", "timestamp"]
+    },
+    "BankDetails": {
+      "title": "Bank Details",
+      "description": "User bank and mobile agent setup data",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "provider": { "type": "string" },
+        "accountNumber": { "type": "string" },
+        "accountName": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "provider", "accountNumber", "accountName"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Global application settings",
+      "type": "object",
+      "properties": {
+        "walletNumber": { "type": "string" },
+        "bkashLogo": { "type": "string" },
+        "nagadLogo": { "type": "string" },
+        "rocketLogo": { "type": "string" },
+        "walletIllustration": { "type": "string" }
+      }
+    },
+    "Withdrawal": {
+      "title": "Withdrawal",
+      "description": "User withdrawal request record",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "amount": { "type": "number" },
+        "method": { "type": "string", "enum": ["bkash", "nagad", "rocket", "bank"] },
+        "accountNumber": { "type": "string" },
+        "bankName": { "type": "string" },
+        "branchName": { "type": "string" },
+        "accountHolderName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "amount", "method", "accountNumber", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/login_logs/{logId}": {
+      "schema": "LoginLog",
+      "description": "Audit logs for login attempts"
+    },
+    "/bank_details/{username}": {
+      "schema": "BankDetails",
+      "description": "User mobile banking agent details"
+    },
+    "/deposits/{depositId}": {
+      "schema": "Deposit",
+      "description": "User activation deposit records"
+    },
+    "/settings/global": {
+      "schema": "AppSettings",
+      "description": "Global app configuration"
+    },
+    "/withdrawals/{withdrawalId}": {
+      "schema": "Withdrawal",
+      "description": "User withdrawal request records"
+    }
+  }
+}
