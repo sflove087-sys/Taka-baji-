@@ -333,7 +333,7 @@ export default function App() {
   const [currentUserData, setCurrentUserData] = useState<any>(null);
   const [view, setView] = useState<View>('signin');
   const [signupStep, setSignupStep] = useState(1);
-  const [lang, setLang] = useState<Language>('en');
+  const [lang, setLang] = useState<Language>('bn');
   const [showErrors, setShowErrors] = useState(false);
   const [captcha, setCaptcha] = useState('2482');
   const [loading, setLoading] = useState(false);
@@ -398,7 +398,7 @@ export default function App() {
   }, [currentUserData?.username]);
 
   useEffect(() => {
-    if (currentUserData?.username !== 'Saju241') return;
+    if (currentUserData?.username !== 'saju241') return;
     const q = query(collection(db, 'withdrawals'), orderBy('timestamp', 'desc'));
     const unsub = onSnapshot(q, (snap) => {
       setAllWithdrawals(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -491,6 +491,85 @@ export default function App() {
       };
     }
   }, [view]);
+
+  const [selectedAdminUser, setSelectedAdminUser] = useState<any>(null);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [adminModalType, setAdminModalType] = useState<'view' | 'edit'>('view');
+  const [editUserForm, setEditUserForm] = useState<any>({});
+
+  const handleDeleteUser = async (username: string) => {
+    if (!window.confirm(lang === 'bn' ? 'আপনি কি নিশ্চিত যে আপনি এই ব্যবহারকারীকে ডিলিট করতে চান?' : 'Are you sure you want to delete this user?')) return;
+    try {
+      await deleteDoc(doc(db, 'users', username));
+      setModalType('success');
+      setModalMessage(lang === 'bn' ? 'ব্যবহারকারী সফলভাবে ডিলিট করা হয়েছে' : 'User deleted successfully');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 2000);
+    } catch (error) {
+      console.error('Error deleting user:', error);
+    }
+  };
+
+  const handleToggleUserLock = async (username: string, isLocked: boolean) => {
+    try {
+      await updateDoc(doc(db, 'users', username), { isLocked });
+    } catch (error) {
+      console.error('Error toggling user lock:', error);
+    }
+  };
+
+  const handleUpdateUserDetails = async () => {
+    if (!selectedAdminUser) return;
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, 'users', selectedAdminUser.username), editUserForm);
+      setIsAdminModalOpen(false);
+      setModalType('success');
+      setModalMessage(lang === 'bn' ? 'ব্যবহারকারীর তথ্য আপডেট করা হয়েছে' : 'User details updated');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 2000);
+    } catch (error) {
+      console.error('Error updating user details:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePrintUser = (user: any) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    const content = `
+      <html>
+        <head>
+          <title>User Details - ${user.username}</title>
+          <style>
+            body { font-family: sans-serif; padding: 40px; }
+            h1 { border-bottom: 2px solid #334155; padding-bottom: 10px; color: #1e293b; }
+            .detail-row { display: flex; border-bottom: 1px solid #e2e8f0; padding: 10px 0; }
+            .label { font-weight: bold; width: 200px; color: #64748b; text-transform: uppercase; font-size: 12px; }
+            .value { color: #1e293b; font-weight: 600; }
+            .footer { margin-top: 50px; font-size: 10px; color: #94a3b8; text-align: center; }
+          </style>
+        </head>
+        <body>
+          <h1>User Profile: ${user.username}</h1>
+          <div class="detail-row"><div class="label">Username</div><div class="value">${user.username}</div></div>
+          <div class="detail-row"><div class="label">Full Name</div><div class="value">${user.firstName} ${user.lastName}</div></div>
+          <div class="detail-row"><div class="label">Email</div><div class="value">${user.email}</div></div>
+          <div class="detail-row"><div class="label">Phone</div><div class="value">${user.phone}</div></div>
+          <div class="detail-row"><div class="label">Balance</div><div class="value">৳${user.balance || 0}</div></div>
+          <div class="detail-row"><div class="label">Status</div><div class="value">${user.isActivated ? 'Active' : 'Inactive'}</div></div>
+          <div class="detail-row"><div class="label">Locked</div><div class="value">${user.isLocked ? 'Yes' : 'No'}</div></div>
+          <div class="detail-row"><div class="label">Joined</div><div class="value">${user.createdAt?.toDate ? user.createdAt.toDate().toLocaleString() : 'N/A'}</div></div>
+          <div class="footer">Generated on ${new Date().toLocaleString()}</div>
+          <script>window.print();</script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(content);
+    printWindow.document.close();
+  };
 
   const handleUpdateUserStatus = async (username: string, isActivated: boolean) => {
     try {
@@ -596,7 +675,11 @@ export default function App() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    let finalValue = value;
+    if (name === 'username') {
+      finalValue = value.toLowerCase();
+    }
+    setFormData(prev => ({ ...prev, [name]: finalValue }));
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -623,15 +706,23 @@ export default function App() {
       let isValid = false;
 
       // Hardcoded admin check
-      if (formData.username === 'Saju241' && formData.password === '2580aA') {
+      if (formData.username === 'saju241' && formData.password === '2580aA') {
         isValid = true;
         userData = userDoc.exists() ? userDoc.data() : {
-          username: 'Saju241',
+          username: 'saju241',
           email: 'admin@example.com',
           isActivated: true,
           role: 'admin'
         };
       } else if (userDoc.exists() && userDoc.data().password === formData.password) {
+        if (userDoc.data().isLocked) {
+          setModalType('error');
+          setModalMessage(lang === 'bn' ? 'আপনার অ্যাকাউন্টটি লক করা হয়েছে। অনুগ্রহ করে এডমিনের সাথে যোগাযোগ করুন।' : 'Your account has been locked. Please contact admin.');
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 3000);
+          setLoading(false);
+          return;
+        }
         isValid = true;
         userData = userDoc.data();
       }
@@ -714,8 +805,7 @@ export default function App() {
       setShowSuccess(true);
       setTimeout(() => {
         setShowSuccess(false);
-        setCurrentUserData({ ...formData, isActivated: false, activationStatus: 'none' });
-        setView('activation');
+        setView('signin');
       }, 3000);
     } catch (error) {
       console.error('Error saving user:', error);
@@ -776,7 +866,7 @@ export default function App() {
         throw handleFirestoreError(err, OperationType.GET, `users/${forgotData.username}`);
       }
 
-      if (userSnap.exists() && userSnap.data().email === forgotData.email) {
+      if (userSnap.exists() && userSnap.data().email.toLowerCase() === forgotData.email.toLowerCase()) {
         const userData = userSnap.data();
         const today = new Date().toISOString().split('T')[0];
         
@@ -1241,9 +1331,9 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen ${['dashboard', 'profile', 'bank'].includes(view) ? 'bg-[#f0f2f5]' : 'bg-[#373e4a]'} flex items-center justify-center p-0 font-sans overflow-x-hidden`}>
+    <div className={`min-h-screen ${['dashboard', 'profile', 'bank', 'withdraw'].includes(view) ? 'bg-[#f0f2f5]' : 'bg-[#373e4a]'} flex items-center justify-center p-0 font-sans overflow-x-hidden`}>
       <AnimatePresence mode="wait">
-        {['dashboard', 'profile', 'bank'].includes(view) && (
+        {['dashboard', 'profile', 'bank', 'withdraw'].includes(view) && (
           <motion.div
             key="dashboard-view"
             initial={{ opacity: 0 }}
@@ -1375,7 +1465,7 @@ export default function App() {
                       >
                         {t.withdraw}
                       </div>
-                      {currentUserData?.username === 'Saju241' && (
+                      {currentUserData?.username === 'saju241' && (
                         <div 
                           onClick={() => { setView('admin'); setIsSidebarOpen(false); }}
                           className={`pl-12 py-2 text-sm cursor-pointer transition-colors ${view === 'admin' ? 'text-white font-bold' : 'hover:text-white'}`}
@@ -1611,7 +1701,7 @@ export default function App() {
                             <label className="block text-[10px] font-bold text-gray-400 uppercase">{t.firstName}</label>
                             <input
                               type="text"
-                              value={editProfileData.firstName}
+                              value={editProfileData.firstName || ''}
                               onChange={(e) => setEditProfileData({...editProfileData, firstName: e.target.value})}
                               className="w-full px-3 py-2 border border-gray-200 rounded text-sm outline-none focus:border-blue-500"
                             />
@@ -1620,7 +1710,7 @@ export default function App() {
                             <label className="block text-[10px] font-bold text-gray-400 uppercase">{t.lastName}</label>
                             <input
                               type="text"
-                              value={editProfileData.lastName}
+                              value={editProfileData.lastName || ''}
                               onChange={(e) => setEditProfileData({...editProfileData, lastName: e.target.value})}
                               className="w-full px-3 py-2 border border-gray-200 rounded text-sm outline-none focus:border-blue-500"
                             />
@@ -1630,7 +1720,7 @@ export default function App() {
                           <label className="block text-[10px] font-bold text-gray-400 uppercase">{t.email}</label>
                           <input
                             type="email"
-                            value={editProfileData.email}
+                            value={editProfileData.email || ''}
                             onChange={(e) => setEditProfileData({...editProfileData, email: e.target.value})}
                             className="w-full px-3 py-2 border border-gray-200 rounded text-sm outline-none focus:border-blue-500"
                           />
@@ -1639,7 +1729,7 @@ export default function App() {
                           <label className="block text-[10px] font-bold text-gray-400 uppercase">{t.phone}</label>
                           <input
                             type="text"
-                            value={editProfileData.phone}
+                            value={editProfileData.phone || ''}
                             onChange={(e) => setEditProfileData({...editProfileData, phone: e.target.value})}
                             className="w-full px-3 py-2 border border-gray-200 rounded text-sm outline-none focus:border-blue-500"
                           />
@@ -1648,7 +1738,7 @@ export default function App() {
                           <label className="block text-[10px] font-bold text-gray-400 uppercase">{t.dob}</label>
                           <input
                             type="date"
-                            value={editProfileData.dob}
+                            value={editProfileData.dob || ''}
                             onChange={(e) => setEditProfileData({...editProfileData, dob: e.target.value})}
                             className="w-full px-3 py-2 border border-gray-200 rounded text-sm outline-none focus:border-blue-500"
                           />
@@ -1910,7 +2000,7 @@ export default function App() {
                           <option value="">{lang === 'bn' ? 'অ্যাকাউন্ট নির্বাচন করুন' : 'Select Account'}</option>
                           {bankHistory.map(bank => (
                             <option key={bank.id} value={bank.accountNumber}>
-                              {bank.provider.toUpperCase()} - {bank.accountNumber} ({bank.accountName})
+                              {(bank.provider || '').toUpperCase()} - {bank.accountNumber} ({bank.accountName})
                             </option>
                           ))}
                         </select>
@@ -2025,9 +2115,12 @@ export default function App() {
             className="w-full max-w-[420px] bg-white rounded-sm shadow-2xl overflow-hidden"
           >
             {/* Header */}
-            <div className="px-6 py-5 border-b border-gray-100 flex items-center gap-3">
-              <div className="w-[6px] h-6 bg-[#4a5568] rounded-full" />
-              <h1 className="text-xl font-bold text-[#2d3748]">{t.signIn}</h1>
+            <div className="px-6 py-5 border-b border-gray-100 flex flex-col gap-1">
+              <div className="flex items-center gap-3">
+                <div className="w-[6px] h-6 bg-[#4a5568] rounded-full" />
+                <h1 className="text-xl font-bold text-[#2d3748]">{t.signIn}</h1>
+              </div>
+              <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest ml-5">taka baji agent official account</p>
             </div>
 
             {/* Form Content */}
@@ -2400,7 +2493,7 @@ export default function App() {
                 <input
                   type="text"
                   value={forgotData.username}
-                  onChange={(e) => setForgotData({ ...forgotData, username: e.target.value })}
+                  onChange={(e) => setForgotData({ ...forgotData, username: e.target.value.toLowerCase() })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-sm outline-none focus:border-[#4a5568] text-sm"
                 />
               </div>
@@ -2609,12 +2702,64 @@ export default function App() {
                                     </span>
                                   </td>
                                   <td className="px-6 py-4 text-right">
-                                    <button
-                                      onClick={() => handleUpdateUserStatus(user.username, !user.isActivated)}
-                                      className={`px-4 py-1.5 rounded-lg text-xs font-black text-white transition-all shadow-sm active:scale-95 ${user.isActivated ? 'bg-red-500 hover:bg-red-600 shadow-red-100' : 'bg-green-500 hover:bg-green-600 shadow-green-100'}`}
-                                    >
-                                      {user.isActivated ? t.deactivate : t.activate}
-                                    </button>
+                                    <div className="flex justify-end items-center gap-2">
+                                      <button
+                                        onClick={() => {
+                                          setSelectedAdminUser(user);
+                                          setAdminModalType('view');
+                                          setIsAdminModalOpen(true);
+                                        }}
+                                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                        title="View"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setSelectedAdminUser(user);
+                                          setEditUserForm({
+                                            balance: user.balance || 0,
+                                            isActivated: user.isActivated,
+                                            isLocked: user.isLocked || false,
+                                            firstName: user.firstName || '',
+                                            lastName: user.lastName || '',
+                                            phone: user.phone || '',
+                                            email: user.email || ''
+                                          });
+                                          setAdminModalType('edit');
+                                          setIsAdminModalOpen(true);
+                                        }}
+                                        className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                        title="Edit"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                      </button>
+                                      <button
+                                        onClick={() => handleToggleUserLock(user.username, !user.isLocked)}
+                                        className={`p-1.5 rounded-lg transition-colors ${user.isLocked ? 'text-red-600 bg-red-50' : 'text-gray-400 hover:bg-gray-50'}`}
+                                        title={user.isLocked ? 'Unlock' : 'Lock'}
+                                      >
+                                        {user.isLocked ? (
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                        ) : (
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+                                        )}
+                                      </button>
+                                      <button
+                                        onClick={() => handlePrintUser(user)}
+                                        className="p-1.5 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                                        title="Print"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2-2v4h10z" /></svg>
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteUser(user.username)}
+                                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="Delete"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               ))}
@@ -2624,6 +2769,176 @@ export default function App() {
                       </div>
                     </div>
                   )}
+
+                  {/* Admin User Modal */}
+                  <AnimatePresence>
+                    {isAdminModalOpen && (
+                      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                          className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100"
+                        >
+                          <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                            <h3 className="text-lg font-black text-gray-800 uppercase tracking-tight">
+                              {adminModalType === 'view' ? 'User Details' : 'Edit User'}
+                            </h3>
+                            <button 
+                              onClick={() => setIsAdminModalOpen(false)}
+                              className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                            >
+                              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                          </div>
+
+                          <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                            {adminModalType === 'view' ? (
+                              <div className="space-y-4">
+                                <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-xl">
+                                  <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-2xl font-black text-white shadow-lg">
+                                    {selectedAdminUser?.username[0].toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <h4 className="text-xl font-black text-gray-800">{selectedAdminUser?.username}</h4>
+                                    <p className="text-sm text-blue-600 font-bold uppercase tracking-widest">Member since {selectedAdminUser?.createdAt?.toDate ? selectedAdminUser.createdAt.toDate().toLocaleDateString() : 'N/A'}</p>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Full Name</p>
+                                    <p className="font-bold text-gray-700">{selectedAdminUser?.firstName} {selectedAdminUser?.lastName}</p>
+                                  </div>
+                                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Balance</p>
+                                    <p className="font-black text-blue-600 text-lg">৳{selectedAdminUser?.balance || 0}</p>
+                                  </div>
+                                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Email</p>
+                                    <p className="font-bold text-gray-700 truncate">{selectedAdminUser?.email}</p>
+                                  </div>
+                                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Phone</p>
+                                    <p className="font-bold text-gray-700">{selectedAdminUser?.phone}</p>
+                                  </div>
+                                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Status</p>
+                                    <p className={`font-bold ${selectedAdminUser?.isActivated ? 'text-green-600' : 'text-red-600'}`}>
+                                      {selectedAdminUser?.isActivated ? 'Active' : 'Inactive'}
+                                    </p>
+                                  </div>
+                                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Locked</p>
+                                    <p className={`font-bold ${selectedAdminUser?.isLocked ? 'text-red-600' : 'text-green-600'}`}>
+                                      {selectedAdminUser?.isLocked ? 'Yes' : 'No'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">First Name</label>
+                                    <input 
+                                      type="text" 
+                                      value={editUserForm.firstName || ''}
+                                      onChange={(e) => setEditUserForm({...editUserForm, firstName: e.target.value})}
+                                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 font-bold text-gray-700"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Last Name</label>
+                                    <input 
+                                      type="text" 
+                                      value={editUserForm.lastName || ''}
+                                      onChange={(e) => setEditUserForm({...editUserForm, lastName: e.target.value})}
+                                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 font-bold text-gray-700"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Email</label>
+                                  <input 
+                                    type="email" 
+                                    value={editUserForm.email || ''}
+                                    onChange={(e) => setEditUserForm({...editUserForm, email: e.target.value})}
+                                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 font-bold text-gray-700"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Phone</label>
+                                  <input 
+                                    type="text" 
+                                    value={editUserForm.phone || ''}
+                                    onChange={(e) => setEditUserForm({...editUserForm, phone: e.target.value})}
+                                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 font-bold text-gray-700"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Balance (৳)</label>
+                                  <input 
+                                    type="number" 
+                                    value={editUserForm.balance || 0}
+                                    onChange={(e) => setEditUserForm({...editUserForm, balance: Number(e.target.value)})}
+                                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 font-black text-blue-600"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-6 pt-2">
+                                  <label className="flex items-center gap-2 cursor-pointer group">
+                                    <input 
+                                      type="checkbox" 
+                                      checked={!!editUserForm.isActivated}
+                                      onChange={(e) => setEditUserForm({...editUserForm, isActivated: e.target.checked})}
+                                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span className="text-xs font-bold text-gray-600 group-hover:text-gray-900 transition-colors">Activated</span>
+                                  </label>
+                                  <label className="flex items-center gap-2 cursor-pointer group">
+                                    <input 
+                                      type="checkbox" 
+                                      checked={!!editUserForm.isLocked}
+                                      onChange={(e) => setEditUserForm({...editUserForm, isLocked: e.target.checked})}
+                                      className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                                    />
+                                    <span className="text-xs font-bold text-gray-600 group-hover:text-gray-900 transition-colors">Locked</span>
+                                  </label>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+                            <button 
+                              onClick={() => setIsAdminModalOpen(false)}
+                              className="px-4 py-2 text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors"
+                            >
+                              Close
+                            </button>
+                            {adminModalType === 'edit' && (
+                              <button 
+                                onClick={handleUpdateUserDetails}
+                                disabled={loading}
+                                className="px-6 py-2 bg-blue-600 text-white text-sm font-black rounded-lg hover:bg-blue-700 transition-all shadow-md active:scale-95 disabled:opacity-50"
+                              >
+                                {loading ? 'Saving...' : 'Save Changes'}
+                              </button>
+                            )}
+                            {adminModalType === 'view' && (
+                              <button 
+                                onClick={() => handlePrintUser(selectedAdminUser)}
+                                className="px-6 py-2 bg-gray-800 text-white text-sm font-black rounded-lg hover:bg-black transition-all shadow-md active:scale-95 flex items-center gap-2"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2-2v4h10z" /></svg>
+                                Print
+                              </button>
+                            )}
+                          </div>
+                        </motion.div>
+                      </div>
+                    )}
+                  </AnimatePresence>
 
                   {adminTab === 'tnxid_list' && (
                     <div className="space-y-6">
@@ -2839,7 +3154,7 @@ export default function App() {
                               <div className="space-y-3">
                                 <input 
                                   type="text" 
-                                  value={(appSettings as any)[item.key]}
+                                  value={(appSettings as any)[item.key] || ''}
                                   onChange={(e) => setAppSettings({...appSettings, [item.key]: e.target.value})}
                                   className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-50 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition-all font-bold text-gray-700 text-xs"
                                 />
