@@ -167,6 +167,7 @@ const translations = {
     activate: 'Activate',
     deactivate: 'Deactivate',
     walletNumber: 'Wallet Number',
+    wallet: 'Wallet',
     saveSettings: 'Save Settings',
     logoUrl: 'Logo URL',
     uploadReceipt: 'Upload Payment Receipt',
@@ -297,6 +298,7 @@ const translations = {
     activate: 'অ্যাক্টিভেট',
     deactivate: 'ডিঅ্যাক্টিভেট',
     walletNumber: 'ওয়ালেট নম্বর',
+    wallet: 'ওয়ালেট',
     saveSettings: 'সেটিংস সেভ করুন',
     logoUrl: 'লোগো ইউআরএল',
     uploadReceipt: 'পেমেন্ট রিসিভ আপলোড করুন',
@@ -372,7 +374,11 @@ export default function App() {
     nagadAgentNumber: '01748231914,01764810008,01723993331',
     nagadAgentName: 'Nagad Agent',
     rocketAgentNumber: '01748231914,01764810008,01723993331',
-    rocketAgentName: 'Rocket Agent'
+    rocketAgentName: 'Rocket Agent',
+    isBkashEnabled: true,
+    isNagadEnabled: true,
+    isRocketEnabled: true,
+    isWalletNumberEnabled: true
   });
 
   useEffect(() => {
@@ -426,7 +432,12 @@ export default function App() {
 
   useEffect(() => {
     if (view === 'payment') {
-      const numbersStr = selectedMethod === 'bkash' ? appSettings.bkashAgentNumber : selectedMethod === 'nagad' ? appSettings.nagadAgentNumber : appSettings.rocketAgentNumber;
+      let numbersStr = '';
+      if (selectedMethod === 'bkash') numbersStr = appSettings.bkashAgentNumber;
+      else if (selectedMethod === 'nagad') numbersStr = appSettings.nagadAgentNumber;
+      else if (selectedMethod === 'rocket') numbersStr = appSettings.rocketAgentNumber;
+      else if (selectedMethod === 'wallet') numbersStr = appSettings.walletNumber;
+
       const numbers = numbersStr.split(',').map(n => n.trim()).filter(n => n);
       if (numbers.length > 0) {
         setActiveAgentNumber(numbers[Math.floor(Math.random() * numbers.length)]);
@@ -1796,10 +1807,11 @@ export default function App() {
                       <label className="block text-sm font-bold text-gray-700">{t.selectProvider}</label>
                       <div className="grid grid-cols-3 gap-2">
                         {[
-                          { id: 'bkash', label: t.bkash, color: 'bg-[#e2136e]' },
-                          { id: 'nagad', label: t.nagad, color: 'bg-[#f7941d]' },
-                          { id: 'rocket', label: t.rocket, color: 'bg-[#8c3494]' }
-                        ].map(provider => (
+                          { id: 'bkash', label: t.bkash, color: 'bg-[#e2136e]', enabled: appSettings.isBkashEnabled },
+                          { id: 'nagad', label: t.nagad, color: 'bg-[#f7941d]', enabled: appSettings.isNagadEnabled },
+                          { id: 'rocket', label: t.rocket, color: 'bg-[#8c3494]', enabled: appSettings.isRocketEnabled },
+                          { id: 'wallet', label: t.walletNumber, color: 'bg-blue-600', enabled: appSettings.isWalletNumberEnabled }
+                        ].filter(p => p.enabled).map(provider => (
                           <button
                             key={provider.id}
                             type="button"
@@ -1917,13 +1929,14 @@ export default function App() {
                     <form onSubmit={handleWithdrawSubmit} className="space-y-6">
                       <div className="space-y-1">
                         <label className="block text-sm font-bold text-gray-700">{t.withdrawMethod}</label>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                           {[
-                            { id: 'bkash', label: t.bkash, color: 'bg-[#e2136e]' },
-                            { id: 'nagad', label: t.nagad, color: 'bg-[#f7941d]' },
-                            { id: 'rocket', label: t.rocket, color: 'bg-[#8c3494]' },
-                            { id: 'bank', label: t.bankAccount, color: 'bg-blue-600' }
-                          ].map(provider => (
+                            { id: 'bkash', label: t.bkash, color: 'bg-[#e2136e]', enabled: appSettings.isBkashEnabled },
+                            { id: 'nagad', label: t.nagad, color: 'bg-[#f7941d]', enabled: appSettings.isNagadEnabled },
+                            { id: 'rocket', label: t.rocket, color: 'bg-[#8c3494]', enabled: appSettings.isRocketEnabled },
+                            { id: 'wallet', label: t.walletNumber, color: 'bg-blue-600', enabled: appSettings.isWalletNumberEnabled },
+                            { id: 'bank', label: t.bankAccount, color: 'bg-blue-600', enabled: true }
+                          ].filter(p => p.enabled).map(provider => (
                             <button
                               key={provider.id}
                               type="button"
@@ -2056,7 +2069,9 @@ export default function App() {
                                 <td className="px-3 py-2">
                                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold text-white ${
                                     item.method === 'bkash' ? 'bg-[#e2136e]' : 
-                                    item.method === 'nagad' ? 'bg-[#f7941d]' : 'bg-[#8c3494]'
+                                    item.method === 'nagad' ? 'bg-[#f7941d]' : 
+                                    item.method === 'rocket' ? 'bg-[#8c3494]' : 
+                                    item.method === 'wallet' ? 'bg-blue-600' : 'bg-gray-600'
                                   }`}>
                                     {t[item.method]}
                                   </span>
@@ -3185,6 +3200,31 @@ export default function App() {
                               className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-50 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition-all font-bold text-gray-700"
                             />
                           </div>
+                        </div>
+
+                        <div className="pt-6 border-t border-gray-100">
+                          <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Payment Method Availability</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            {[
+                              { label: 'Enable bKash', key: 'isBkashEnabled', color: 'text-[#e2136e]' },
+                              { label: 'Enable Nagad', key: 'isNagadEnabled', color: 'text-[#f7941d]' },
+                              { label: 'Enable Rocket', key: 'isRocketEnabled', color: 'text-[#8c3494]' },
+                              { label: 'Enable Wallet Number', key: 'isWalletNumberEnabled', color: 'text-blue-600' }
+                            ].map((method) => (
+                              <label key={method.key} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl cursor-pointer group hover:bg-white hover:shadow-md transition-all border-2 border-transparent hover:border-blue-100">
+                                <span className={`text-xs font-bold ${method.color}`}>{method.label}</span>
+                                <div className="relative inline-flex items-center cursor-pointer">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={!!(appSettings as any)[method.key]}
+                                    onChange={(e) => setAppSettings({...appSettings, [method.key]: e.target.checked})}
+                                    className="sr-only peer"
+                                  />
+                                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
                           
                           <button 
                             onClick={handleSaveSettings}
@@ -3284,14 +3324,14 @@ export default function App() {
                 <div className="text-center space-y-2">
                   <div className="flex flex-col items-center">
                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
-                      {selectedMethod === 'bkash' ? appSettings.bkashAgentName : selectedMethod === 'nagad' ? appSettings.nagadAgentName : appSettings.rocketAgentName}
+                      {selectedMethod === 'bkash' ? appSettings.bkashAgentName : selectedMethod === 'nagad' ? appSettings.nagadAgentName : selectedMethod === 'rocket' ? appSettings.rocketAgentName : t.walletNumber}
                     </span>
-                    <h2 className={`text-3xl font-bold tracking-wider ${selectedMethod === 'bkash' ? 'text-[#e2136e]' : selectedMethod === 'nagad' ? 'text-[#f7941d]' : 'text-[#8c3494]'}`}>
-                      {activeAgentNumber || (selectedMethod === 'bkash' ? appSettings.bkashAgentNumber.split(',')[0] : selectedMethod === 'nagad' ? appSettings.nagadAgentNumber.split(',')[0] : appSettings.rocketAgentNumber.split(',')[0])}
+                    <h2 className={`text-3xl font-bold tracking-wider ${selectedMethod === 'bkash' ? 'text-[#e2136e]' : selectedMethod === 'nagad' ? 'text-[#f7941d]' : selectedMethod === 'rocket' ? 'text-[#8c3494]' : 'text-blue-600'}`}>
+                      {activeAgentNumber || (selectedMethod === 'bkash' ? appSettings.bkashAgentNumber.split(',')[0] : selectedMethod === 'nagad' ? appSettings.nagadAgentNumber.split(',')[0] : selectedMethod === 'rocket' ? appSettings.rocketAgentNumber.split(',')[0] : appSettings.walletNumber)}
                     </h2>
                   </div>
                   <button 
-                    onClick={() => handleCopy(activeAgentNumber || (selectedMethod === 'bkash' ? appSettings.bkashAgentNumber.split(',')[0] : selectedMethod === 'nagad' ? appSettings.nagadAgentNumber.split(',')[0] : appSettings.rocketAgentNumber.split(',')[0]))}
+                    onClick={() => handleCopy(activeAgentNumber || (selectedMethod === 'bkash' ? appSettings.bkashAgentNumber.split(',')[0] : selectedMethod === 'nagad' ? appSettings.nagadAgentNumber.split(',')[0] : selectedMethod === 'rocket' ? appSettings.rocketAgentNumber.split(',')[0] : appSettings.walletNumber))}
                     className="px-4 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded-full border border-gray-200 hover:bg-gray-200 transition-colors"
                   >
                     {t.copy}
