@@ -331,6 +331,56 @@ const translations = {
   },
 };
 
+const Loading3D = () => (
+  <div className="fixed inset-0 z-[200] flex items-center justify-center bg-white/90 backdrop-blur-lg">
+    <div className="relative">
+      <motion.div
+        animate={{
+          rotateX: [0, 360],
+          rotateY: [0, 360],
+          scale: [1, 1.1, 1],
+        }}
+        transition={{
+          duration: 3,
+          repeat: Infinity,
+          ease: "easeInOut"
+        }}
+        className="w-24 h-24 bg-gradient-to-br from-blue-600 to-blue-400 rounded-2xl shadow-[0_20px_50px_rgba(37,99,235,0.4)] flex items-center justify-center border-2 border-white/20"
+        style={{ transformStyle: 'preserve-3d' }}
+      >
+        <div className="text-4xl font-black text-white drop-shadow-lg">৳</div>
+      </motion.div>
+      
+      {[...Array(4)].map((_, i) => (
+        <motion.div
+          key={i}
+          animate={{
+            y: [0, -40, 0],
+            x: [0, i % 2 === 0 ? 20 : -20, 0],
+            opacity: [0, 1, 0],
+            scale: [0.5, 1, 0.5]
+          }}
+          transition={{
+            duration: 2,
+            repeat: Infinity,
+            delay: i * 0.5,
+            ease: "easeInOut"
+          }}
+          className="absolute top-1/2 left-1/2 w-3 h-3 bg-blue-400 rounded-full blur-sm"
+        />
+      ))}
+      
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="absolute -bottom-12 left-1/2 -translate-x-1/2 whitespace-nowrap text-blue-600 font-black uppercase tracking-[0.2em] text-xs"
+      >
+        Processing Securely
+      </motion.p>
+    </div>
+  </div>
+);
+
 export default function App() {
   const [currentUserData, setCurrentUserData] = useState<any>(null);
   const [view, setView] = useState<View>('signin');
@@ -344,9 +394,11 @@ export default function App() {
   const [isAccountExpanded, setIsAccountExpanded] = useState(true);
   const [isReportExpanded, setIsReportExpanded] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
+  const [isPageLoading, setIsPageLoading] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<'bkash' | 'nagad' | 'rocket'>('bkash');
   const [isRegisteredUsersExpanded, setIsRegisteredUsersExpanded] = useState(true);
   const [modalType, setModalType] = useState<'success' | 'error'>('success');
+  const [userDeposits, setUserDeposits] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [allWithdrawals, setAllWithdrawals] = useState<any[]>([]);
@@ -362,7 +414,7 @@ export default function App() {
   const [editProfileData, setEditProfileData] = useState<any>({});
   const [sheetTransactions, setSheetTransactions] = useState<any[]>([]);
   const [approvedDeposits, setApprovedDeposits] = useState<any[]>([]);
-  const [adminTab, setAdminTab] = useState<'users' | 'recharge_requests' | 'tnxid_list' | 'logo_settings' | 'withdrawal_requests'>('users');
+  const [adminTab, setAdminTab] = useState<'users' | 'recharge_requests' | 'pending_deposits' | 'tnxid_list' | 'logo_settings' | 'withdrawal_requests'>('users');
   const [appSettings, setAppSettings] = useState({
     walletNumber: '01602872965',
     bkashLogo: 'https://raw.githubusercontent.com/sflove087/assets/main/bkash_logo.png',
@@ -429,6 +481,17 @@ export default function App() {
   const [modalMessage, setModalMessage] = useState('');
 
   const [activeAgentNumber, setActiveAgentNumber] = useState('');
+
+  useEffect(() => {
+    if (view === 'payment') {
+      setIsPageLoading(true);
+      setSelectedMethod('bkash');
+      const timer = setTimeout(() => {
+        setIsPageLoading(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [view]);
 
   useEffect(() => {
     if (view === 'payment') {
@@ -1024,6 +1087,20 @@ export default function App() {
     }
   }, [view, currentUserData]);
 
+  useEffect(() => {
+    if (currentUserData?.username) {
+      const q = query(
+        collection(db, 'deposits'),
+        where('username', '==', currentUserData.username),
+        orderBy('timestamp', 'desc')
+      );
+      const unsub = onSnapshot(q, (snap) => {
+        setUserDeposits(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+      return () => unsub();
+    }
+  }, [currentUserData?.username]);
+
   const handlePaymentSubmit = async () => {
     if (!paymentData.senderNumber || !paymentData.transactionId) {
       setModalType('error');
@@ -1053,87 +1130,89 @@ export default function App() {
       const searchId = paymentData.transactionId.trim().toLowerCase();
       const searchAmount = paymentData.amount.toString().trim();
       
-      // Use the already fetched sheetTransactions state
-      isAutoApproved = sheetTransactions.some(tx => {
-        const sheetTxId = tx.txId;
-        const rawSheetAmount = tx.amount;
-        
-        // Normalize sheet amount: remove commas and other non-numeric chars except dot
-        const normalizedSheetAmount = rawSheetAmount?.replace(/[^0-9.]/g, '');
-        const sheetAmountNum = parseFloat(normalizedSheetAmount || '0');
-        const searchAmountNum = parseFloat(searchAmount);
-        
-        // Log for debugging (visible in console)
-        if (sheetTxId && (sheetTxId === searchId || sheetTxId.includes(searchId))) {
-          console.log('Found ID match in Admin List:', sheetTxId, 'vs', searchId);
-          console.log('Checking amount:', sheetAmountNum, 'vs', searchAmountNum, '(Raw:', rawSheetAmount, ')');
-        }
-
-        // Use a small epsilon for float comparison
-        return sheetTxId === searchId && Math.abs(sheetAmountNum - searchAmountNum) < 0.01;
-      });
-
-      // Fallback: If state is empty, try one direct fetch (just in case)
-      if (!isAutoApproved && sheetTransactions.length === 0) {
-        const sheetUrl = import.meta.env.VITE_GOOGLE_SHEET_TSV_URL;
-        if (sheetUrl) {
-          try {
-            const response = await fetch(sheetUrl);
-            const tsvText = await response.text();
-            const rows = tsvText.split('\n');
-            isAutoApproved = rows.some(row => {
-              const columns = row.split('\t');
-              if (columns.length < 5) return false;
-              const sheetTxId = columns[1]?.trim().toLowerCase().replace(/\r/g, '').replace(/^"|"$/g, '');
-              const rawSheetAmount = columns[4]?.trim().replace(/\r/g, '').replace(/^"|"$/g, '');
-              const normalizedSheetAmount = rawSheetAmount?.replace(/[^0-9.]/g, '');
-              const sheetAmountNum = parseFloat(normalizedSheetAmount || '0');
-              const searchAmountNum = parseFloat(searchAmount);
-              return sheetTxId === searchId && Math.abs(sheetAmountNum - searchAmountNum) < 0.01;
-            });
-          } catch (err) {
-            console.error('Fallback fetch error:', err);
-          }
-        }
-      }
-
-      if (!isAutoApproved) {
-        setModalType('error');
-        setModalMessage(t.invalidTxId);
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 3000);
-        setLoading(false);
-        return;
-      }
-
-      // Create deposit record
-      await addDoc(collection(db, 'deposits'), {
-        username: currentUserData.username,
-        amount: paymentData.amount,
-        transactionId: paymentData.transactionId,
-        senderNumber: paymentData.senderNumber,
-        status: 'approved',
-        timestamp: serverTimestamp()
-      });
-
-      // Update user status and add to balance
-      const currentBalance = Number(currentUserData.balance || 0);
-      await updateDoc(doc(db, 'users', currentUserData.username), {
-        isActivated: true,
-        activationStatus: 'completed',
-        balance: currentBalance + paymentData.amount
-      });
-      
+      // Wait for 30 seconds to try and find the transaction
       setModalType('success');
-      setModalMessage(t.autoApproved);
+      setModalMessage(lang === 'bn' ? 'পেমেন্ট যাচাই করা হচ্ছে... অনুগ্রহ করে ৩০ সেকেন্ড অপেক্ষা করুন।' : 'Verifying payment... Please wait 30 seconds.');
       setShowSuccess(true);
       
-      setTimeout(() => {
-        setShowSuccess(false);
-        setView('dashboard');
-        // Refresh user data
-        refreshBalance();
-      }, 3000);
+      // We'll check every 5 seconds for 30 seconds
+      let attempts = 0;
+      const maxAttempts = 6;
+      
+      const checkVerification = async () => {
+        // Use the already fetched sheetTransactions state or fetch fresh
+        let currentSheetTransactions = sheetTransactions;
+        
+        if (currentSheetTransactions.length === 0) {
+          const sheetUrl = import.meta.env.VITE_GOOGLE_SHEET_TSV_URL;
+          if (sheetUrl) {
+            try {
+              const response = await fetch(sheetUrl);
+              const tsvText = await response.text();
+              const rows = tsvText.split('\n');
+              currentSheetTransactions = rows.map(row => {
+                const columns = row.split('\t');
+                return { txId: columns[1]?.trim().toLowerCase(), amount: columns[4]?.trim() };
+              });
+            } catch (err) {
+              console.error('Fetch error during verification:', err);
+            }
+          }
+        }
+
+        isAutoApproved = currentSheetTransactions.some(tx => {
+          const sheetTxId = tx.txId;
+          const rawSheetAmount = tx.amount;
+          const normalizedSheetAmount = rawSheetAmount?.replace(/[^0-9.]/g, '');
+          const sheetAmountNum = parseFloat(normalizedSheetAmount || '0');
+          const searchAmountNum = parseFloat(searchAmount);
+          return sheetTxId === searchId && Math.abs(sheetAmountNum - searchAmountNum) < 0.01;
+        });
+
+        if (isAutoApproved || attempts >= maxAttempts) {
+          // Finalize submission
+          await addDoc(collection(db, 'deposits'), {
+            username: currentUserData.username,
+            amount: paymentData.amount,
+            transactionId: paymentData.transactionId,
+            senderNumber: paymentData.senderNumber,
+            status: isAutoApproved ? 'approved' : 'pending',
+            timestamp: serverTimestamp()
+          });
+
+          if (isAutoApproved) {
+            const currentBalance = Number(currentUserData.balance || 0);
+            await updateDoc(doc(db, 'users', currentUserData.username), {
+              isActivated: true,
+              activationStatus: 'completed',
+              balance: currentBalance + paymentData.amount
+            });
+            setModalType('success');
+            setModalMessage(t.autoApproved);
+          } else {
+            setModalType('success');
+            setModalMessage(lang === 'bn' ? 'পেমেন্ট যাচাই করা সম্ভব হয়নি। এটি পেন্ডিং হিসেবে জমা দেওয়া হয়েছে।' : 'Payment could not be verified automatically. It has been submitted as pending.');
+          }
+          
+          setShowSuccess(true);
+          setLoading(false);
+          
+          setTimeout(() => {
+            setShowSuccess(false);
+            setView(currentUserData.isActivated || isAutoApproved ? 'dashboard' : 'activation');
+            refreshBalance();
+          }, 3000);
+          
+          return true; // Done
+        }
+        
+        attempts++;
+        setTimeout(checkVerification, 5000);
+        return false;
+      };
+
+      await checkVerification();
+      return; // Exit handlePaymentSubmit early as checkVerification handles the rest
     } catch (error) {
       console.error('Error submitting payment:', error);
       setModalType('error');
@@ -1269,13 +1348,14 @@ export default function App() {
 
     setLoading(true);
     try {
+      const isAutoApproved = amount < 5000;
       // Create withdrawal request
       const withdrawPayload: any = {
         username: currentUserData.username,
         amount: amount,
         method: withdrawData.method,
         accountNumber: withdrawData.accountNumber,
-        status: 'pending',
+        status: isAutoApproved ? 'approved' : 'pending',
         timestamp: serverTimestamp()
       };
 
@@ -1293,7 +1373,7 @@ export default function App() {
       });
 
       setModalType('success');
-      setModalMessage(t.withdrawPending);
+      setModalMessage(isAutoApproved ? t.withdrawSuccess : t.withdrawPending);
       setShowSuccess(true);
       setWithdrawData({ amount: '', method: 'bkash', accountNumber: '' });
       refreshBalance();
@@ -1319,6 +1399,35 @@ export default function App() {
       setTimeout(() => setShowSuccess(false), 2000);
     } catch (error) {
       console.error('Error updating withdrawal status:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateDepositStatus = async (deposit: any, status: 'approved' | 'rejected') => {
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, 'deposits', deposit.id), { status });
+      
+      if (status === 'approved') {
+        const userRef = doc(db, 'users', deposit.username);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const currentBalance = Number(userSnap.data().balance || 0);
+          await updateDoc(userRef, {
+            balance: currentBalance + Number(deposit.amount),
+            isActivated: true,
+            activationStatus: 'completed'
+          });
+        }
+      }
+      
+      setModalType('success');
+      setModalMessage(`Deposit ${status} successfully`);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 2000);
+    } catch (error) {
+      console.error('Error updating deposit status:', error);
     } finally {
       setLoading(false);
     }
@@ -2579,6 +2688,33 @@ export default function App() {
               >
                 {t.depositNow}
               </button>
+
+              {userDeposits.length > 0 && (
+                <div className="mt-6 space-y-3 text-left">
+                  <h4 className="text-sm font-bold text-gray-700 border-b pb-1">
+                    {lang === 'bn' ? 'ডিপোজিট হিস্ট্রি' : 'Deposit History'}
+                  </h4>
+                  <div className="max-h-[200px] overflow-y-auto space-y-2 pr-1">
+                    {userDeposits.map((deposit) => (
+                      <div key={deposit.id} className="bg-gray-50 p-3 rounded border border-gray-100 flex justify-between items-center">
+                        <div>
+                          <p className="text-xs font-bold text-gray-800">৳{deposit.amount}</p>
+                          <p className="text-[10px] text-gray-500 font-mono">{deposit.transactionId}</p>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          deposit.status === 'approved' ? 'bg-green-100 text-green-700' : 
+                          deposit.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {deposit.status === 'approved' ? (lang === 'bn' ? 'সফল' : 'Approved') : 
+                           deposit.status === 'rejected' ? (lang === 'bn' ? 'বাতিল' : 'Rejected') : 
+                           (lang === 'bn' ? 'পেন্ডিং' : 'Pending')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={handleLogout}
                 className="w-full py-3 bg-gray-100 text-gray-600 font-bold rounded-sm hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
@@ -2625,6 +2761,7 @@ export default function App() {
               <div className="flex border-b border-gray-200 overflow-x-auto no-scrollbar">
                 {[
                   { id: 'users', label: t.userManagement, icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg> },
+                  { id: 'pending_deposits', label: 'Pending Deposits', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
                   { id: 'recharge_requests', label: 'Recharge Request List', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
                   { id: 'tnxid_list', label: 'Tnxid List', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 2v-6m-8 13h11a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg> },
                   { id: 'withdrawal_requests', label: 'Withdrawal Requests', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
@@ -3004,6 +3141,68 @@ export default function App() {
                     </div>
                   )}
 
+                  {adminTab === 'pending_deposits' && (
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-xl font-black text-gray-800 flex items-center gap-2">
+                          <div className="w-2 h-6 bg-yellow-600 rounded-full" />
+                          Pending Deposit List
+                        </h2>
+                      </div>
+                      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-sm">
+                            <thead className="bg-gray-50/50 text-gray-500 font-bold border-b">
+                              <tr>
+                                <th className="px-6 py-4 uppercase tracking-tighter">User</th>
+                                <th className="px-6 py-4 uppercase tracking-tighter">TxID</th>
+                                <th className="px-6 py-4 uppercase tracking-tighter">Amount</th>
+                                <th className="px-6 py-4 uppercase tracking-tighter">Time</th>
+                                <th className="px-6 py-4 uppercase tracking-tighter text-right">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {approvedDeposits.filter(d => d.status === 'pending').length === 0 ? (
+                                <tr>
+                                  <td colSpan={5} className="px-6 py-10 text-center text-gray-400 italic">No pending deposits</td>
+                                </tr>
+                              ) : (
+                                approvedDeposits.filter(d => d.status === 'pending').map((dep, idx) => (
+                                  <tr key={idx} className="hover:bg-yellow-50/30 transition-colors">
+                                    <td className="px-6 py-4 font-bold text-gray-700">{dep.username}</td>
+                                    <td className="px-6 py-4 font-mono text-xs text-yellow-600 font-bold">{dep.transactionId}</td>
+                                    <td className="px-6 py-4 font-black text-gray-800">৳{dep.amount}</td>
+                                    <td className="px-6 py-4 text-gray-500 text-xs font-medium">
+                                      {dep.timestamp?.toDate ? dep.timestamp.toDate().toLocaleString() : 'Just now'}
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                      <div className="flex justify-end gap-2">
+                                        <button 
+                                          onClick={() => handleUpdateDepositStatus(dep, 'approved')}
+                                          className="p-1.5 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors"
+                                          title="Approve"
+                                        >
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                                        </button>
+                                        <button 
+                                          onClick={() => handleUpdateDepositStatus(dep, 'rejected')}
+                                          className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                                          title="Reject"
+                                        >
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {adminTab === 'recharge_requests' && (
                     <div className="space-y-6">
                       <div className="flex items-center justify-between">
@@ -3029,12 +3228,12 @@ export default function App() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                              {approvedDeposits.length === 0 ? (
+                              {approvedDeposits.filter(d => d.status === 'approved').length === 0 ? (
                                 <tr>
-                                  <td colSpan={4} className="px-6 py-10 text-center text-gray-400 italic">No recharge requests yet</td>
+                                  <td colSpan={4} className="px-6 py-10 text-center text-gray-400 italic">No approved recharge requests yet</td>
                                 </tr>
                               ) : (
-                                approvedDeposits.map((dep, idx) => (
+                                approvedDeposits.filter(d => d.status === 'approved').map((dep, idx) => (
                                   <tr key={idx} className="hover:bg-green-50/30 transition-colors">
                                     <td className="px-6 py-4 font-bold text-gray-700">{dep.username}</td>
                                     <td className="px-6 py-4 font-mono text-xs text-green-600 font-bold">{dep.transactionId}</td>
@@ -3244,13 +3443,14 @@ export default function App() {
           </motion.div>
         )}
         {view === 'payment' && (
-          <motion.div
-            key="payment"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="w-full max-w-[450px] bg-white rounded-lg shadow-2xl overflow-hidden border border-gray-200"
-          >
+          isPageLoading ? <Loading3D /> : (
+            <motion.div
+              key="payment"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="w-full max-w-[450px] bg-white rounded-lg shadow-2xl overflow-hidden border border-gray-200"
+            >
             {/* Payment Header with Logos */}
             <div className="bg-white px-6 py-4 flex items-center justify-between border-b">
               <div className="flex items-center gap-3">
@@ -3425,6 +3625,7 @@ export default function App() {
               </div>
             </div>
           </motion.div>
+          )
         )}
       </AnimatePresence>
 
